@@ -1,22 +1,28 @@
 import React, { useState } from 'react';
 import { View, Text, TextInput, TouchableOpacity, StyleSheet, Alert } from 'react-native';
+import auth from '@react-native-firebase/auth';
 
 const LoginScreen = ({ navigation }) => {
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
 
-  const handleLogin = () => {
+  const handleLogin = async () => {
     if (email === '' || password === '') {
       Alert.alert('Erro', 'Por favor, preencha todos os campos');
       return;
     }
 
-    navigation.replace('Home');
+    try {
+      await auth().signInWithEmailAndPassword(email, password);
+      navigation.replace('Home');
+    } catch (error) {
+      Alert.alert('Erro ao fazer login', error.message);
+    }
   };
 
-  const handleRegisterPress = () => {
+  function handleRegisterPress() {
     navigation.navigate('Register');
-  };
+  }
 
   return (
     <View style={styles.container}>

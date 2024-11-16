@@ -1,5 +1,7 @@
 import React, { useState } from 'react';
 import { View, Text, TextInput, TouchableOpacity, StyleSheet, Alert } from 'react-native';
+import auth from '@react-native-firebase/auth';
+import firestore from '@react-native-firebase/firestore';
 
 const RegisterScreen = ({ navigation }) => {
   const [name, setName] = useState('');
@@ -8,17 +10,29 @@ const RegisterScreen = ({ navigation }) => {
   const [cpf, setCpf] = useState('');
   const [phone, setPhone] = useState('');
 
-  const handleRegister = () => {
-    // Validação simples para verificar se todos os campos estão preenchidos
+  const handleRegister = async () => {
     if (!name || !email || !password || !cpf || !phone) {
       Alert.alert('Erro', 'Por favor, preencha todos os campos.');
       return;
     }
 
-    // Lógica de cadastro pode ser adicionada aqui (ex.: enviar dados para o backend)
+    try {
+      // Cria o usuário no Firebase Authentication
+      const userCredential = await auth().createUserWithEmailAndPassword(email, password);
 
-    Alert.alert('Sucesso', 'Cadastro realizado com sucesso!');
-    navigation.replace('Login'); // Navega de volta para a tela de login
+      // Adiciona os dados do usuário no Firestore
+      await firestore().collection('users').doc(userCredential.user.uid).set({
+        name,
+        email,
+        cpf,
+        phone,
+      });
+
+      Alert.alert('Sucesso', 'Cadastro realizado com sucesso!');
+      navigation.replace('Login');
+    } catch (error) {
+      Alert.alert('Erro ao cadastrar', error.message);
+    }
   };
 
   return (

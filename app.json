@@ -29,11 +29,15 @@
     "web": {
       "favicon": "./assets/favicon.png"
     },
-
     "plugins": [
       "@react-native-firebase/app",
       "@react-native-firebase/perf",
       "@react-native-firebase/crashlytics"
-    ]
+    ],
+    "extra": {
+      "eas": {
+        "projectId": "a4d5ad42-be90-4ad5-ab5a-a624e614fd42"
+      }
+    }
   }
 }

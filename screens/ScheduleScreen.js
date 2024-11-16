@@ -1,37 +1,97 @@
 import React, { useState } from 'react';
-import { View, Text, TouchableOpacity, StyleSheet } from 'react-native';
+import { View, Text, StyleSheet, Alert, TouchableOpacity, ScrollView } from 'react-native';
+import auth from '@react-native-firebase/auth';
+import firestore from '@react-native-firebase/firestore';
 import { Calendar } from 'react-native-calendars';
 
-const ScheduleScreen = ({ navigation }) => {
-  const [selectedDate, setSelectedDate] = useState(null);
-  const [selectedPeriod, setSelectedPeriod] = useState(null);
+const ScheduleScreen = ({ route, navigation }) => {
+  const { professionalId, professionalName } = route.params; // Recebe os parâmetros passados
+  const [selectedDate, setSelectedDate] = useState('');
+  const [selectedTime, setSelectedTime] = useState('');
 
-  const periods = ['Manhã', 'Tarde', 'Noite'];
+  const availableTimes = Array.from({ length: 15 }, (_, i) => `${10 + i}:00`); // Gera horários de 10h até 24h
+
+  // Função para verificar se a data selecionada é hoje ou futura
+  const isValidDate = (date) => {
+    const selected = new Date(date); // A data selecionada pelo usuário
+    const today = new Date(); // A data atual
+    today.setHours(0, 0, 0, 0); // Configura a hora da data atual para 00:00:00 para comparar apenas a data
+
+    // Compara as duas datas apenas pela parte da data (ignorando a hora)
+    return selected >= today;
+  };
 
   const onDateSelect = (day) => {
-    setSelectedDate(day.dateString);
+    const formattedDate = day.dateString; // Formato YYYY-MM-DD
+    
+    if (!isValidDate(formattedDate)) {
+      Alert.alert('Erro', 'Você não pode agendar para datas passadas. Por favor, selecione uma data futura.');
+      return;
+    }
+
+    setSelectedDate(formattedDate);
   };
 
-  const onPeriodSelect = (period) => {
-    setSelectedPeriod(period);
-  };
+  const handleSchedule = async () => {
+    if (!selectedDate || !selectedTime) {
+      Alert.alert('Erro', 'Selecione uma data e um horário!');
+      return;
+    }
 
-  const onConfirmPress = () => {
-    if (!selectedDate || !selectedPeriod) {
-      alert('Por favor, selecione uma data e um período.');
-    } else {
-      navigation.navigate('CategorySelection');
+    try {
+      const userId = auth().currentUser.uid; // Obtém o UID do usuário logado
+      const appointmentsRef = firestore().collection('appointments');
+
+      // Verifica se já existe um agendamento para o mesmo profissional, data e horário
+      const snapshot = await appointmentsRef
+        .where('professionalId', '==', professionalId)
+        .where('date', '==', selectedDate)
+        .where('time', '==', selectedTime)
+        .get();
+
+      if (!snapshot.empty) {
+        // Se já houver um agendamento, exibe um alerta
+        Alert.alert('Erro', 'Este horário já foi agendado. Por favor, selecione outro horário.');
+        return;
+      }
+
+      // Caso não haja agendamento, cria o novo agendamento
+      await appointmentsRef.add({
+        userId,
+        professionalId,
+        professionalName,
+        date: selectedDate,
+        time: selectedTime,
+        createdAt: firestore.FieldValue.serverTimestamp(),
+      });
+
+      Alert.alert(
+        'Sucesso!',
+        `Agendamento realizado com ${professionalName} para ${selectedDate} às ${selectedTime}.`
+      );
+
+      // Resetando a navegação para que a tela Home seja a única na pilha
+      navigation.reset({
+        index: 0,
+        routes: [{ name: 'Home' }],
+      });
+    } catch (error) {
+      Alert.alert('Erro', 'Não foi possível realizar o agendamento. Tente novamente mais tarde.');
+      console.error(error);
     }
   };
 
   return (
     <View style={styles.container}>
-      <Text style={styles.title}>Escolha a Data</Text>
-
+      <Text style={styles.title}>Agendar com {professionalName}</Text>
       <Calendar
         onDayPress={onDateSelect}
         markedDates={{
-          [selectedDate]: { selected: true, selectedColor: '#6200EA' },
+          [selectedDate]: {
+            selected: true,
+            marked: true,
+            selectedColor: '#6200EA',
+          },
         }}
         theme={{
           selectedDayBackgroundColor: '#6200EA',
@@ -39,32 +99,35 @@ const ScheduleScreen = ({ navigation }) => {
           arrowColor: '#6200EA',
         }}
       />
-
-      <Text style={styles.label}>Selecione o Período:</Text>
-      <View style={styles.periodContainer}>
-        {periods.map((period) => (
+      <Text style={styles.label}>Data selecionada: {selectedDate || 'Nenhuma'}</Text>
+      <Text style={styles.label}>Horário selecionado: {selectedTime || 'Nenhum'}</Text>
+      <ScrollView 
+        horizontal 
+        showsHorizontalScrollIndicator={false} 
+        contentContainerStyle={styles.timeContainer} // Mudei para contentContainerStyle
+      >
+        {availableTimes.map((time) => (
           <TouchableOpacity
-            key={period}
-            style={[
-              styles.periodButton,
-              selectedPeriod === period && styles.selectedPeriodButton,
+            key={time}
+            style={[ 
+              styles.timeButton,
+              selectedTime === time && styles.timeButtonSelected, // Destaca o botão selecionado
             ]}
-            onPress={() => onPeriodSelect(period)}
+            onPress={() => setSelectedTime(time)}
           >
             <Text
-              style={[
-                styles.periodText,
-                selectedPeriod === period && styles.selectedPeriodText,
+              style={[ 
+                styles.timeButtonText,
+                selectedTime === time && styles.timeButtonTextSelected, // Destaca o texto selecionado
               ]}
             >
-              {period}
+              {time}
             </Text>
           </TouchableOpacity>
         ))}
-      </View>
-
-      <TouchableOpacity style={styles.confirmButton} onPress={onConfirmPress}>
-        <Text style={styles.confirmButtonText}>Fazer Agendamento</Text>
+      </ScrollView>
+      <TouchableOpacity style={styles.scheduleButton} onPress={handleSchedule}>
+        <Text style={styles.scheduleButtonText}>Confirmar Agendamento</Text>
       </TouchableOpacity>
     </View>
   );
@@ -74,47 +137,59 @@ const styles = StyleSheet.create({
   container: {
     flex: 1,
     padding: 20,
-    alignItems: 'center',
+    backgroundColor: '#FFF',
   },
   title: {
-    fontSize: 24,
+    fontSize: 22,
     fontWeight: 'bold',
     marginBottom: 20,
+    textAlign: 'center',
+    color: '#6200EA',
   },
   label: {
-    fontSize: 18,
-    marginVertical: 15,
+    fontSize: 16,
+    marginVertical: 10,
+    color: '#555',
   },
-  periodContainer: {
+  timeContainer: {
     flexDirection: 'row',
-    justifyContent: 'space-around',
-    width: '100%',
-    marginBottom: 20,
+    marginVertical: 10,
+    justifyContent: 'center', // Agora está em contentContainerStyle
   },
-  periodButton: {
-    padding: 10,
-    borderRadius: 5,
-    backgroundColor: '#E0E0E0',
+  timeButton: {
+    backgroundColor: '#FFF',
+    borderColor: '#6200EA',
+    borderWidth: 1,
+    borderRadius: 10,
+    paddingVertical: 8, // Ajusta o padding para ser mais compacto
+    paddingHorizontal: 15, // Ajusta o padding horizontal
+    marginHorizontal: 5,
+    maxWidth: 120, // Limita a largura máxima dos botões
+    justifyContent: 'center', // Garante que o conteúdo do botão esteja centralizado
+    alignItems: 'center', // Centraliza o texto dentro do botão
   },
-  selectedPeriodButton: {
+  timeButtonSelected: {
     backgroundColor: '#6200EA',
   },
-  periodText: {
-    color: '#000',
+  timeButtonText: {
+    fontSize: 14, // Ajusta o tamanho da fonte para se adequar melhor ao botão
+    color: '#6200EA',
+    textAlign: 'center', // Garante que o texto ficará centralizado
   },
-  selectedPeriodText: {
+  timeButtonTextSelected: {
     color: '#FFF',
   },
-  confirmButton: {
+  scheduleButton: {
     backgroundColor: '#6200EA',
-    paddingVertical: 12,
-    paddingHorizontal: 25,
-    borderRadius: 5,
+    padding: 15,
+    borderRadius: 20,
+    alignItems: 'center',
     marginTop: 20,
   },
-  confirmButtonText: {
+  scheduleButtonText: {
     color: '#FFF',
-    fontSize: 16,
+    fontSize: 18,
+    fontWeight: 'bold',
   },
 });
 
